@@ -11,8 +11,8 @@ Indicadores do mercado brasileiro no pulso: um **tile** e uma **complication** p
 ## Funcionalidades
 
 **Tile "Mercado"**
-- Mostra 3 ativos ao mesmo tempo, com valor e variação do dia (verde/vermelho).
-- Os 3 ativos são escolhidos pelo usuário. O padrão é Selic, dólar e Ibovespa.
+- Mostra de **1 a 4 ativos**, com valor e variação do dia (verde/vermelho).
+- Os ativos e a ordem são escolhidos pelo usuário. O padrão é Selic, dólar e Ibovespa.
 - Atualiza sozinho a cada 30 minutos. Tocar no tile atualiza na hora.
 - Tocar em **MERCADO ›** abre a tela de configuração.
 - Sem internet, mostra os últimos valores salvos e indica `Offline · HH:mm`.
@@ -22,8 +22,10 @@ Indicadores do mercado brasileiro no pulso: um **tile** e uma **complication** p
 - Atualiza a cada 1 hora, com o mesmo cache offline do tile.
 
 **Configuração no relógio**
-- Lista as 3 posições do tile. Tocar numa posição abre a lista de ativos.
-- Escolher um ativo que já está em outra posição **troca as duas de lugar**, então nunca há repetição e o tile sempre tem 3 itens.
+- Lista os ativos do tile, na ordem em que aparecem.
+- **+ Adicionar ativo** inclui um novo no final, até o máximo de 4. O tile não rola, e mais linhas seriam cortadas pela borda redonda.
+- Tocar num ativo abre as opções **Trocar ativo**, **Mover para cima/baixo** e **Remover do tile**. O último ativo não pode ser removido.
+- Não há repetição: ao adicionar, os ativos que já estão no tile aparecem desabilitados; ao trocar, escolher um que já está em outra posição **troca os dois de lugar**.
 - **Busca livre**: digite ou dite um nome ou ticker (`petr`, `dólar`, `hglg11`, `apple`…). A busca procura no catálogo e no Yahoo Finance, que cobre ações, FIIs, ETFs, índices, cripto e moedas.
 
 <p align="center">
@@ -78,7 +80,7 @@ wear/src/main/java/com/example/mercadowatch/
 └── data/
     ├── Ativo.kt              # catálogo de ativos, fontes, formato e busca no catálogo
     ├── MercadoRepository.kt  # requisições HTTP, busca de tickers e cache em SharedPreferences
-    ├── Preferencias.kt       # quais ativos ocupam as 3 posições do tile
+    ├── Preferencias.kt       # lista (1 a 4) e ordem dos ativos do tile
     └── Formatos.kt           # números no padrão brasileiro (13,75% · R$ 5,99 · 164.887)
 ```
 

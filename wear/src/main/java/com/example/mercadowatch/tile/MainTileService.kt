@@ -31,7 +31,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.Dispatchers
 
 /**
- * Tile "Mercado": mostra 3 ativos escolhidos pelo usuário (padrão: Selic, dólar e Ibovespa).
+ * Tile "Mercado": mostra de 1 a 4 ativos escolhidos pelo usuário (padrão: Selic, dólar e Ibovespa).
  *
  * - Os ativos vêm de [Preferencias]; os dados, do [MercadoRepository] (com cache offline).
  * - O sistema pede um novo tile a cada [FRESCOR_MS]; tocar no tile força a atualização.
@@ -80,13 +80,15 @@ class MainTileService : TileService() {
             .addContent(cabecalho())
             .addContent(espaco(4f))
 
+        // Com 4 linhas, aperta os espaços para tudo caber dentro da tela redonda
+        val compacto = ativos.size >= 4
         ativos.forEachIndexed { i, ativo ->
-            if (i > 0) conteudo.addContent(espaco(6f))
+            if (i > 0) conteudo.addContent(espaco(if (compacto) 2f else 6f))
             conteudo.addContent(linha(ativo, cotacoes[ativo]))
         }
 
         conteudo
-            .addContent(espaco(10f))
+            .addContent(espaco(if (compacto) 6f else 10f))
             .addContent(texto(rodape(cotacoes.values), 11f, COR_SECUNDARIA))
 
         return Box.Builder()
