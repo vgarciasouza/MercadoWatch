@@ -8,7 +8,8 @@ import org.json.JSONObject
  * Guarda a lista de ativos exibida no tile, na ordem de exibição.
  *
  * - A lista tem entre [MIN_ATIVOS] e [MAX_ATIVOS] itens, sem repetição.
- *   O máximo existe porque o tile não rola: mais linhas seriam cortadas pela borda redonda.
+ *   O máximo existe porque o tile não rola: com mais de 6 linhas, as de cima e de baixo
+ *   seriam cortadas pela borda redonda.
  * - Cada item pode ser do catálogo ou um ticker qualquer da busca livre.
  * - Gravada como JSON: [{"id":"selic"}, {"id":"yahoo:HGLG11.SA","nome":"FII HGLG PAXCI"}, ...]
  *   (o nome só é necessário para tickers da busca livre, cujo id carrega apenas o símbolo).
@@ -103,7 +104,7 @@ class Preferencias(context: Context) {
 
     companion object {
         const val MIN_ATIVOS = 1
-        const val MAX_ATIVOS = 4
+        const val MAX_ATIVOS = 6
         val PADRAO = listOf(Ativo.SELIC, Ativo.DOLAR, Ativo.IBOVESPA)
         private const val PREFS_NOME = "configuracao"
         private const val CHAVE_LISTA = "ativos"

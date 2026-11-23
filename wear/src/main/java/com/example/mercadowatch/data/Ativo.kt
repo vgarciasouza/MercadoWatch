@@ -12,6 +12,9 @@ sealed interface Fonte {
 
     /** Símbolo do Yahoo Finance, ex.: "^BVSP" ou "PETR4.SA". */
     data class Yahoo(val simbolo: String) : Fonte
+
+    /** Título público na ANBIMA, ex.: titulo = "NTN-B", vencimento = "20350515" (yyyyMMdd). */
+    data class Anbima(val titulo: String, val vencimento: String) : Fonte
 }
 
 /** Como o valor é exibido no relógio. */
@@ -26,7 +29,7 @@ enum class Formato {
 
 /**
  * Um ativo que pode ocupar uma posição do tile: ou do [CATALOGO] fixo, ou um ticker qualquer
- * do Yahoo Finance encontrado pela busca livre (ver [doYahoo]).
+ * do Yahoo Finance / título público da ANBIMA encontrado pela busca (ver [doYahoo], [doAnbima]).
  *
  * Igualdade é pelo [id], que é gravado nas preferências e usado como chave do cache.
  * Os ids do catálogo não devem ser alterados depois de publicados.
@@ -42,7 +45,14 @@ class Ativo(
     val formato: Formato,
 ) {
     /** true se veio da busca livre (não faz parte do catálogo). */
-    val personalizado: Boolean get() = id.startsWith(PREFIXO_YAHOO)
+    val personalizado: Boolean get() = id.startsWith(PREFIXO_YAHOO) || id.startsWith(PREFIXO_ANBIMA)
+
+    /** Títulos públicos: a variação do dia é da taxa, em pontos-base, não em %. */
+    val variacaoEmBps: Boolean get() = fonte is Fonte.Anbima
+
+    /** Variação do dia formatada: "+0,69%" ou, para títulos, "+5 bps". */
+    fun formatarVariacao(variacao: Double): String =
+        if (variacaoEmBps) Formatos.bps(variacao) else Formatos.variacao(variacao)
 
     /** Valor formatado no padrão brasileiro, conforme o [formato] do ativo. */
     fun formatar(cotacao: Cotacao): String = when (formato) {
@@ -63,6 +73,7 @@ class Ativo(
             is Fonte.Bcb -> fonte.serie.toString()
             is Fonte.Awesome -> fonte.par
             is Fonte.Yahoo -> fonte.simbolo
+            is Fonte.Anbima -> "${fonte.titulo} ${fonte.vencimento.take(4)}"
         }
 
     /**
@@ -81,11 +92,20 @@ class Ativo(
 
     companion object {
         private const val PREFIXO_YAHOO = "yahoo:"
+        private const val PREFIXO_ANBIMA = "anbima:"
 
         // Banco Central (SGS). A Selic usa janela curta porque a série tem datas futuras.
         val SELIC = Ativo("selic", "Selic", "Selic meta", Fonte.Bcb(432, 10), Formato.PERCENTUAL)
         val CDI = Ativo("cdi", "CDI", "CDI (anualizado)", Fonte.Bcb(4389, 10), Formato.PERCENTUAL)
         val IPCA = Ativo("ipca12m", "IPCA", "IPCA 12 meses", Fonte.Bcb(13522, 120), Formato.PERCENTUAL)
+
+        // ANBIMA (títulos públicos, taxa indicativa): vencimentos de referência
+        val NTNB_2035 = Ativo(
+            "ntnb2035", "NTNB35", "NTN-B 2035", Fonte.Anbima("NTN-B", "20350515"), Formato.PERCENTUAL,
+        )
+        val NTNF_2035 = Ativo(
+            "ntnf2035", "NTNF35", "NTN-F 2035", Fonte.Anbima("NTN-F", "20350101"), Formato.PERCENTUAL,
+        )
 
         // AwesomeAPI
         val DOLAR = Ativo("dolar", "Dólar", "Dólar comercial", Fonte.Awesome("USD-BRL"), Formato.REAIS)
@@ -103,7 +123,7 @@ class Ativo(
 
         /** Catálogo fixo, na ordem exibida na tela de configuração. */
         val CATALOGO: List<Ativo> = listOf(
-            SELIC, CDI, IPCA, DOLAR, EURO, BITCOIN,
+            SELIC, CDI, IPCA, NTNB_2035, NTNF_2035, DOLAR, EURO, BITCOIN,
             IBOVESPA, SP500, PETR4, VALE3, ITUB4, BBAS3, WEGE3,
         )
 
@@ -126,12 +146,33 @@ class Ativo(
         }
 
         /**
+         * Título público da ANBIMA (ex.: "NTN-B", "20450515" -> "NTN-B 2045", rótulo "NTNB45").
+         * Se o título já estiver no catálogo, devolve a entrada do catálogo.
+         */
+        fun doAnbima(titulo: String, vencimento: String): Ativo {
+            val fonte = Fonte.Anbima(titulo, vencimento)
+            CATALOGO.firstOrNull { it.fonte == fonte }?.let { return it }
+            val ano = vencimento.take(4)
+            return Ativo(
+                id = "$PREFIXO_ANBIMA$titulo:$vencimento",
+                rotulo = titulo.replace("-", "").take(4) + ano.takeLast(2),
+                nome = "$titulo $ano",
+                fonte = fonte,
+                formato = Formato.PERCENTUAL,
+            )
+        }
+
+        /**
          * Recupera um ativo pelo [id] gravado. Para tickers da busca livre, [nome] é o nome
          * salvo junto (o id só carrega o símbolo).
          */
         fun porId(id: String?, nome: String? = null): Ativo? {
             if (id == null) return null
             if (id.startsWith(PREFIXO_YAHOO)) return doYahoo(id.removePrefix(PREFIXO_YAHOO), nome)
+            if (id.startsWith(PREFIXO_ANBIMA)) {
+                val partes = id.removePrefix(PREFIXO_ANBIMA).split(':')
+                return if (partes.size == 2) doAnbima(partes[0], partes[1]) else null
+            }
             return CATALOGO.firstOrNull { it.id == id }
         }
 

@@ -40,8 +40,10 @@ import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import androidx.compose.runtime.LaunchedEffect
+import com.example.mercadowatch.data.Anbima
 import com.example.mercadowatch.data.Ativo
 import com.example.mercadowatch.data.Fonte
+import com.example.mercadowatch.data.Formatos
 import com.example.mercadowatch.data.MercadoRepository
 import com.example.mercadowatch.data.Preferencias
 import com.example.mercadowatch.data.ResultadoBusca
@@ -50,7 +52,7 @@ import com.example.mercadowatch.presentation.theme.MercadoWatchTheme
 import com.example.mercadowatch.tile.MainTileService
 
 /**
- * Tela de configuração do tile: monta a lista de ativos exibidos (1 a 4).
+ * Tela de configuração do tile: monta a lista de ativos exibidos (1 a 6).
  *
  * Fluxo: lista → "+ Adicionar ativo" → escolhe; ou lista → toque num ativo →
  * trocar / mover / remover.
@@ -210,6 +212,15 @@ fun TelaItem(
                 ) { Text(ativo.nome, maxLines = 2, textAlign = TextAlign.Center) }
             }
             item {
+                val context = LocalContext.current
+                Button(
+                    onClick = { context.startActivity(DetalhesActivity.intent(context, ativo)) },
+                    modifier = Modifier.fillMaxWidth().transformedHeight(this, spec),
+                    transformation = SurfaceTransformation(spec),
+                    label = { Text("Ver detalhes") },
+                )
+            }
+            item {
                 Button(
                     onClick = onTrocar,
                     modifier = Modifier.fillMaxWidth().transformedHeight(this, spec),
@@ -291,13 +302,20 @@ fun TelaEscolherAtivo(posicao: Int?, ativos: List<Ativo>, onEscolhido: (Ativo) -
     LaunchedEffect(termo) {
         if (termo.isBlank()) return@LaunchedEffect
         carregando = true
-        try {
-            // Remove o que já aparece pelo catálogo
-            online = repositorio.pesquisarTickers(termo).filter { it.ativo !in resultados }
+        // Títulos públicos (ANBIMA) e tickers (Yahoo) falham de forma independente
+        suspend fun <T> tentar(bloco: suspend () -> List<T>): List<T> = try {
+            bloco()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             erroOnline = true
+            emptyList()
+        }
+        try {
+            val titulos = tentar { repositorio.pesquisarTitulos(termo) }
+            val tickers = tentar { repositorio.pesquisarTickers(termo) }
+            // Títulos primeiro; remove o que já aparece pelo catálogo
+            online = (titulos + tickers).filter { it.ativo !in resultados }.distinctBy { it.ativo }
         } finally {
             carregando = false
         }
@@ -395,7 +413,13 @@ fun TelaEscolherAtivo(posicao: Int?, ativos: List<Ativo>, onEscolhido: (Ativo) -
             online.forEach { resultado ->
                 val ativo = resultado.ativo
                 val aviso = avisoDoAtivo(ativo, ativos, posicao)
-                val detalhe = listOfNotNull(ativo.codigo, resultado.bolsa).joinToString(" · ")
+                // Títulos: a data exata de vencimento (o nome já traz título e ano)
+                val fonte = ativo.fonte
+                val detalhe = if (fonte is Fonte.Anbima) {
+                    "Venc. " + Formatos.data(Anbima.dataVencimento(fonte.vencimento))
+                } else {
+                    listOfNotNull(ativo.codigo, resultado.bolsa).joinToString(" · ")
+                }
                 item {
                     RadioButton(
                         selected = ativo == atual,

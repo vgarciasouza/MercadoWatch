@@ -38,6 +38,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Detalhes de um ativo; exported porque o tile a abre via LaunchAction.
+             singleTask + onNewIntent: tocar em outra linha do tile troca o ativo exibido -->
+        <activity
+            android:name=".presentation.DetalhesActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.DeviceDefault" />
+
         <!-- Complication que exibe a taxa Selic meta (série SGS 432 do Banco Central) -->
         <service
             android:name=".complication.MainComplicationService"

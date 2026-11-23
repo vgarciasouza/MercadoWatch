@@ -26,23 +26,37 @@ import com.example.mercadowatch.data.Cotacao
 import com.example.mercadowatch.data.Formatos
 import com.example.mercadowatch.data.MercadoRepository
 import com.example.mercadowatch.data.Preferencias
+import com.example.mercadowatch.presentation.DetalhesActivity
 import com.example.mercadowatch.presentation.MainActivity
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.Dispatchers
 
 /**
- * Tile "Mercado": mostra de 1 a 4 ativos escolhidos pelo usuário (padrão: Selic, dólar e Ibovespa).
+ * Tile "Mercado": mostra de 1 a 6 ativos escolhidos pelo usuário (padrão: Selic, dólar e Ibovespa).
+ *
+ * O layout escala com o tamanho da tela ([escala]): medidas pensadas para uma tela redonda de
+ * [LARGURA_REFERENCIA_DP]; em telas menores tudo encolhe para as linhas não serem cortadas
+ * pela borda redonda. Com 5 ou 6 ativos os espaçamentos somem, o título sobe e o rodapé desce.
  *
  * - Os ativos vêm de [Preferencias]; os dados, do [MercadoRepository] (com cache offline).
- * - O sistema pede um novo tile a cada [FRESCOR_MS]; tocar no tile força a atualização.
- * - Tocar no título "MERCADO" abre a tela de configuração ([MainActivity]).
+ * - O sistema pede um novo tile a cada [FRESCOR_MS].
+ * - Toques: título "MERCADO ›" abre a configuração ([MainActivity]); cada linha abre os
+ *   detalhes do ativo ([DetalhesActivity]); o rodapé ("Atualizado 14:53 ↻") atualiza o tile.
  */
 class MainTileService : TileService() {
+
+    /** Fator de escala do layout para a tela atual (1 = tela de [LARGURA_REFERENCIA_DP]). */
+    private var escala = 1f
 
     override fun onTileRequest(
         requestParams: RequestBuilders.TileRequest,
     ): ListenableFuture<TileBuilders.Tile> =
         SuspendToFutureAdapter.launchFuture(Dispatchers.Main.immediate) {
+            val larguraTela = requestParams.deviceConfiguration.screenWidthDp
+            escala = if (larguraTela > 0) {
+                (larguraTela / LARGURA_REFERENCIA_DP).coerceIn(ESCALA_MIN, ESCALA_MAX)
+            } else 1f
+
             val ativos = Preferencias(this@MainTileService).ativosDoTile()
             val cotacoes = MercadoRepository(this@MainTileService).buscar(ativos)
             TileBuilders.Tile.Builder()
@@ -69,65 +83,68 @@ class MainTileService : TileService() {
 
     /** Monta o layout: título, uma linha por ativo e o rodapé com a hora da atualização. */
     private fun layout(ativos: List<Ativo>, cotacoes: Map<Ativo, Cotacao?>): LayoutElement {
-        // Tocar em qualquer lugar do tile pede um novo tile (recarrega os dados)
-        val atualizar = ModifiersBuilders.Clickable.Builder()
-            .setId(ID_ATUALIZAR)
-            .setOnClick(ActionBuilders.LoadAction.Builder().build())
-            .build()
-
         val conteudo = Column.Builder()
             .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
-            .addContent(cabecalho())
-            .addContent(espaco(4f))
-
-        // Com 4 linhas, aperta os espaços para tudo caber dentro da tela redonda
-        val compacto = ativos.size >= 4
-        ativos.forEachIndexed { i, ativo ->
-            if (i > 0) conteudo.addContent(espaco(if (compacto) 2f else 6f))
-            conteudo.addContent(linha(ativo, cotacoes[ativo]))
+        // Espaçamento por quantidade de linhas: com 5-6 ativos os espaços somem e as áreas de
+        // toque do título/rodapé encolhem, empurrando o título para cima e o rodapé para baixo
+        val (entreLinhas, margem, alturaPontas) = when {
+            ativos.size >= 5 -> Triple(0f, 0f, 24f)
+            ativos.size == 4 -> Triple(2f, 2f, 32f)
+            else -> Triple(6f, 6f, 32f)
         }
 
         conteudo
-            .addContent(espaco(if (compacto) 6f else 10f))
-            .addContent(texto(rodape(cotacoes.values), 11f, COR_SECUNDARIA))
+            .addContent(cabecalho(alturaPontas))
+            .addContent(espaco(margem))
+        ativos.forEachIndexed { i, ativo ->
+            if (i > 0 && entreLinhas > 0) conteudo.addContent(espaco(entreLinhas))
+            conteudo.addContent(linha(i, ativo, cotacoes[ativo]))
+        }
+        conteudo
+            .addContent(espaco(margem))
+            .addContent(rodape(cotacoes.values, alturaPontas))
 
         return Box.Builder()
             .setWidth(expand())
             .setHeight(expand())
-            .setModifiers(ModifiersBuilders.Modifiers.Builder().setClickable(atualizar).build())
             .addContent(conteudo.build())
             .build()
     }
 
-    /** Título "MERCADO ›" com área de toque própria que abre a configuração. */
-    private fun cabecalho(): LayoutElement {
-        val abrirConfiguracao = ModifiersBuilders.Clickable.Builder()
-            .setId(ID_CONFIGURAR)
-            .setOnClick(
-                ActionBuilders.LaunchAction.Builder()
-                    .setAndroidActivity(
-                        ActionBuilders.AndroidActivity.Builder()
-                            .setPackageName(packageName)
-                            .setClassName(MainActivity::class.java.name)
-                            .build()
-                    )
-                    .build()
+    /** Ação que abre uma activity do app, com extras opcionais. */
+    private fun abrir(classe: Class<*>, extras: Map<String, String> = emptyMap()): ActionBuilders.Action {
+        val atividade = ActionBuilders.AndroidActivity.Builder()
+            .setPackageName(packageName)
+            .setClassName(classe.name)
+        extras.forEach { (chave, valor) ->
+            atividade.addKeyToExtraMapping(
+                chave, ActionBuilders.AndroidStringExtra.Builder().setValue(valor).build()
             )
+        }
+        return ActionBuilders.LaunchAction.Builder().setAndroidActivity(atividade.build()).build()
+    }
+
+    private fun clicavel(id: String, acao: ActionBuilders.Action) =
+        ModifiersBuilders.Modifiers.Builder()
+            .setClickable(ModifiersBuilders.Clickable.Builder().setId(id).setOnClick(acao).build())
             .build()
 
+    /** Título "MERCADO ›" com área de toque própria que abre a configuração. */
+    private fun cabecalho(altura: Float): LayoutElement {
         // Box maior que o texto para facilitar o toque
         return Box.Builder()
-            .setWidth(dp(120f))
-            .setHeight(dp(32f))
-            .setModifiers(
-                ModifiersBuilders.Modifiers.Builder().setClickable(abrirConfiguracao).build()
-            )
+            .setWidth(medida(120f))
+            .setHeight(medida(altura))
+            .setModifiers(clicavel(ID_CONFIGURAR, abrir(MainActivity::class.java)))
             .addContent(texto("MERCADO ›", 12f, COR_SECUNDARIA, negrito = true))
             .build()
     }
 
-    /** Uma linha "Rótulo   valor   variação", com colunas de largura fixa para alinhar. */
-    private fun linha(ativo: Ativo, cotacao: Cotacao?): LayoutElement {
+    /**
+     * Uma linha "Rótulo   valor   variação", com colunas de largura fixa para alinhar.
+     * Tocar na linha abre os detalhes do ativo.
+     */
+    private fun linha(indice: Int, ativo: Ativo, cotacao: Cotacao?): LayoutElement {
         val valor = cotacao?.let { ativo.formatar(it) } ?: "--"
         val variacao = cotacao?.variacaoPct
         val corVariacao = when {
@@ -138,8 +155,13 @@ class MainTileService : TileService() {
         // Valores longos (ex.: "R$ 520 mil") usam fonte menor para caber na coluna
         val tamanhoValor = if (valor.length > 8) 13f else 15f
 
+        val abrirDetalhes = abrir(
+            DetalhesActivity::class.java,
+            mapOf(DetalhesActivity.EXTRA_ID to ativo.id, DetalhesActivity.EXTRA_NOME to ativo.nome),
+        )
         return Row.Builder()
             .setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_CENTER)
+            .setModifiers(clicavel("$ID_DETALHES$indice", abrirDetalhes))
             .addContent(
                 celula(
                     // Rótulos de 6 caracteres (ex.: "HGLG11") usam fonte menor para não cortar
@@ -157,7 +179,7 @@ class MainTileService : TileService() {
             )
             .addContent(
                 celula(
-                    texto(variacao?.let { Formatos.variacao(it) } ?: "", 11f, corVariacao),
+                    texto(variacao?.let { ativo.formatarVariacao(it) } ?: "", 11f, corVariacao),
                     LARGURA_VARIACAO,
                     LayoutElementBuilders.HORIZONTAL_ALIGN_END,
                 )
@@ -165,20 +187,30 @@ class MainTileService : TileService() {
             .build()
     }
 
-    /** "Atualizado 13:55", ou "Offline · 13:50" (hora do dado mais antigo) se algo veio do cache. */
-    private fun rodape(cotacoes: Collection<Cotacao?>): String {
+    /**
+     * Rodapé clicável que atualiza o tile: "Atualizado 13:55 ↻", ou "Offline · 13:50 ↻"
+     * (hora do dado mais antigo) se algo veio do cache.
+     */
+    private fun rodape(cotacoes: Collection<Cotacao?>, altura: Float): LayoutElement {
         val obtidas = cotacoes.filterNotNull()
-        if (obtidas.isEmpty()) return "Sem dados · toque p/ atualizar"
-        return if (obtidas.size < cotacoes.size || obtidas.any { it.doCache }) {
-            "Offline · " + Formatos.hora(obtidas.minOf { it.atualizadoEm })
-        } else {
-            "Atualizado " + Formatos.hora(obtidas.maxOf { it.atualizadoEm })
+        val texto = when {
+            obtidas.isEmpty() -> "Sem dados · toque p/ atualizar"
+            obtidas.size < cotacoes.size || obtidas.any { it.doCache } ->
+                "Offline · " + Formatos.hora(obtidas.minOf { it.atualizadoEm }) + " ↻"
+            else -> "Atualizado " + Formatos.hora(obtidas.maxOf { it.atualizadoEm }) + " ↻"
         }
+        // Área de toque maior que o texto; LoadAction pede um novo tile (recarrega os dados)
+        return Box.Builder()
+            .setWidth(medida(150f))
+            .setHeight(medida(altura))
+            .setModifiers(clicavel(ID_ATUALIZAR, ActionBuilders.LoadAction.Builder().build()))
+            .addContent(texto(texto, 11f, COR_SECUNDARIA))
+            .build()
     }
 
     private fun celula(conteudo: LayoutElement, larguraDp: Float, alinhamento: Int): LayoutElement =
         Box.Builder()
-            .setWidth(dp(larguraDp))
+            .setWidth(medida(larguraDp))
             .setHorizontalAlignment(alinhamento)
             .addContent(conteudo)
             .build()
@@ -193,7 +225,7 @@ class MainTileService : TileService() {
         .setMaxLines(1)
         .setFontStyle(
             FontStyle.Builder()
-                .setSize(sp(tamanhoSp))
+                .setSize(sp(tamanhoSp * escala))
                 .setColor(argb(cor))
                 .setWeight(
                     if (negrito) LayoutElementBuilders.FONT_WEIGHT_BOLD
@@ -204,13 +236,22 @@ class MainTileService : TileService() {
         .build()
 
     private fun espaco(alturaDp: Float): LayoutElement =
-        Spacer.Builder().setHeight(dp(alturaDp)).build()
+        Spacer.Builder().setHeight(medida(alturaDp)).build()
+
+    /** Medida em dp ajustada à tela atual. */
+    private fun medida(valorDp: Float) = dp(valorDp * escala)
 
     companion object {
         private const val VERSAO_RECURSOS = "1"
         private const val ID_ATUALIZAR = "atualizar"
         private const val ID_CONFIGURAR = "configurar"
+        private const val ID_DETALHES = "detalhes_"
         private const val FRESCOR_MS = 30 * 60 * 1000L // 30 minutos
+
+        /** Largura de tela (dp) para a qual as medidas do layout foram pensadas. */
+        private const val LARGURA_REFERENCIA_DP = 227f
+        private const val ESCALA_MIN = 0.8f
+        private const val ESCALA_MAX = 1.1f
 
         private const val LARGURA_ROTULO = 48f
         private const val LARGURA_VALOR = 78f

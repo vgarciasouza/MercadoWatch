@@ -1,19 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Ícone da tela de abertura: os candles do ícone do app sobre um círculo azul-marinho -->
+<!-- Ícone da tela de abertura: a imagem do ícone sobre um círculo azul-marinho -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item
         android:width="48dp"
         android:height="48dp"
         android:gravity="center">
         <shape android:shape="oval">
-            <solid android:color="#FF1A2B45" />
+            <solid android:color="#FF142A45" />
         </shape>
     </item>
-    <!-- O primeiro plano usa só o centro do quadro de 108; com 76dp os candles (~35dp de
-         altura) ficam inteiros dentro do círculo de 48dp -->
+    <!-- Quadrado de 34dp: a diagonal (~48dp) cabe no círculo -->
     <item
-        android:width="76dp"
-        android:height="76dp"
-        android:drawable="@drawable/ic_launcher_foreground"
+        android:width="34dp"
+        android:height="34dp"
+        android:drawable="@drawable/icone_mercado"
         android:gravity="center" />
 </layer-list>
