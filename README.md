@@ -96,3 +96,7 @@ O módulo `mobile/` é o app de celular do template e ainda não é usado.
 ## Aviso
 
 Projeto pessoal, sem relação com o Banco Central, a B3, a AwesomeAPI ou o Yahoo. As cotações podem ter atraso e **não devem ser usadas como base para decisões de investimento**.
+
+## Licença
+
+[MIT](LICENSE)
